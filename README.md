@@ -1,5 +1,5 @@
 # Titanic
-The classic binary classification, the *Kagle*'s 'hello-world' (https://www.kaggle.com/c/titanic).
+The classic binary classification, the *Kaggle*'s 'hello-world' (https://www.kaggle.com/c/titanic).
 
 You can find my step-by-step notes here. The project is split into two standalone jupyter-notebooks. 
 
