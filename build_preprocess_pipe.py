@@ -2,11 +2,14 @@
 import numpy as np
 import pandas as pd
 import re
+from functools import reduce
 from sklearn.preprocessing import FunctionTransformer, MinMaxScaler, OrdinalEncoder, OneHotEncoder
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.pipeline import make_pipeline, Pipeline, FeatureUnion
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
+from sklearn.feature_selection import SelectKBest, f_classif
+from sklearn.decomposition import PCA
 
 def row_to_column(row):
     if type(row) == type(pd.Series()):
@@ -70,19 +73,45 @@ class Discretizer(BaseEstimator, TransformerMixin):
 
     
 
-FareTransformer = Pipeline([('lof1p', make_pipeline(Row_Flipper(), SimpleImputer(strategy='median'), FunctionTransformer(np.log1p, validate=False))),
-                            ('scaler', MinMaxScaler(feature_range=(0, 1)))
-                           ])
+def FareTransformer(feature_range):
+    return Pipeline([('log1p', make_pipeline(Row_Flipper(), SimpleImputer(strategy='median'), FunctionTransformer(np.log1p, validate=False))),
+                     ('scaler', MinMaxScaler(feature_range))
+                    ])
 
-def numerical_transformer():
+def numerical_transformer(tresholds, feature_range):
+    
     numerical_tr = []
-    numerical_tr.append(('age_discretizer', Discretizer('age', tresholds = [5,10,20,30,40,50]), 'Age'))
+    numerical_tr.append(('age_discretizer', Discretizer('age', tresholds), 'Age'))
     numerical_tr.append(('sibsp_discretizer', Discretizer('sibsp', tresholds = [0, 1], handle_missing=False), 'SibSp'))
     numerical_tr.append(('parch_discretizer', Discretizer('parch', tresholds = [0], handle_missing=False), 'Parch'))
-    numerical_tr.append(('fare_transformer', FareTransformer, 'Fare'))
+    numerical_tr.append(('fare_transformer', FareTransformer(feature_range), 'Fare'))
+
     return ColumnTransformer(numerical_tr, sparse_threshold=0)
 
 
+class Title_Extractor(BaseEstimator, TransformerMixin):
+    def __init__(self):
+        self.title_groups = [("Mr.",), ("Mrs.",), ("Miss.",), ("Sir.", "Dr.", "Rev.", "Master")]
+        self.columns = []
+        for title_group in self.title_groups:
+            self.columns.append("_".join(title_group))
+        return None
+    
+    def fit(self, X, y=None):
+        return self
+        
+    def transform(self, X):
+        indeces_dict = {}
+        zero = np.zeros(len(X)).astype('bool')
+        for title_group, column in zip(self.title_groups, self.columns):
+            indeces = []
+            for title in title_group:
+                indeces.append(X.str.find(title) >= 0)
+            indeces_dict[column] = reduce(lambda s1, s2: s1 | s2, indeces, zero).astype('float')
+        
+        return pd.DataFrame(indeces_dict)
+
+    
 sex_encoder = make_pipeline(Row_Flipper(), OrdinalEncoder())
 
 
@@ -137,6 +166,7 @@ pclass_transformer = make_pipeline(Row_Flipper(), OneHotEncoder(categories='auto
 
 
 categorical_tr = []
+categorical_tr.append(('title_extractor', Title_Extractor(), 'Name'))
 categorical_tr.append(('sex_encoder', sex_encoder, 'Sex'))
 categorical_tr.append(('ticket_transformer_1', ticket_transformer_1, 'Ticket'))
 categorical_tr.append(('ticket_transformer_2', ticket_transformer_2, 'Ticket'))
@@ -146,9 +176,43 @@ categorical_tr.append(('pclass_transformer', pclass_transformer, 'Pclass'))
 categorical_transformer = ColumnTransformer(categorical_tr, sparse_threshold=0)
 
 
-def preprocessing_pipe():
+def transform_pipe(age_tresholds=[5, 10, 20, 30, 50], fare_range=(0,1)):
     transformers = [
-        ('numerical_transformer', numerical_transformer()),
+        ('numerical_transformer', numerical_transformer(age_tresholds, fare_range)),
         ('categorical_transformer', categorical_transformer)
     ]
     return FeatureUnion(transformers)
+
+
+class DropKWorst(BaseEstimator, TransformerMixin):
+    def __init__(self, k_features):
+        self.k_features = k_features
+        return None
+    
+    def fit(self, X, y):
+        self.SelectKBest = SelectKBest(f_classif, k = X.shape[1] - self.k_features).fit(X, y)
+        return self
+        
+    def transform(self, X):
+        return self.SelectKBest.transform(X)
+    
+
+class PCA_switch(BaseEstimator, TransformerMixin):
+    def __init__(self, n_components):
+        self.n_components = n_components
+        return None
+    
+    def fit(self, X, y=None):
+        if self.n_components > 0:
+            self.PCA = PCA(self.n_components).fit(X)
+        return self
+        
+    def transform(self, X):
+        return self.PCA.transform(X) if self.n_components > 0 else X
+    
+
+def preprocess_pipe(age_tresholds=[2, 5], fare_range=(0,1), k_features=0, n_components=-1):
+    return Pipeline([('transform', transform_pipe(age_tresholds, fare_range)),
+                     ('feature_select', DropKWorst(k_features=0)),
+                     ('pca', PCA_switch(n_components=-1))
+                    ])
