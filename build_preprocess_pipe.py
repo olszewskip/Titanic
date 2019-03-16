@@ -74,7 +74,7 @@ class Discretizer(BaseEstimator, TransformerMixin):
     
 
 def FareTransformer(feature_range):
-    return Pipeline([('log1p', make_pipeline(Row_Flipper(), SimpleImputer(strategy='median'), FunctionTransformer(np.log1p, validate=False))),
+    return Pipeline([('log1p', make_pipeline(SimpleImputer(strategy='median'), FunctionTransformer(np.log1p, validate=False))),
                      ('scaler', MinMaxScaler(feature_range))
                     ])
 
@@ -84,14 +84,14 @@ def numerical_transformer(tresholds, feature_range):
     numerical_tr.append(('age_discretizer', Discretizer('age', tresholds), 'Age'))
     numerical_tr.append(('sibsp_discretizer', Discretizer('sibsp', tresholds = [0, 1], handle_missing=False), 'SibSp'))
     numerical_tr.append(('parch_discretizer', Discretizer('parch', tresholds = [0], handle_missing=False), 'Parch'))
-    numerical_tr.append(('fare_transformer', FareTransformer(feature_range), 'Fare'))
+    numerical_tr.append(('fare_transformer', FareTransformer(feature_range), ['Fare']))
 
     return ColumnTransformer(numerical_tr, sparse_threshold=0)
 
 
 class Title_Extractor(BaseEstimator, TransformerMixin):
     def __init__(self):
-        self.title_groups = [("Mr.",), ("Mrs.",), ("Miss.",), ("Sir.", "Dr.", "Rev.", "Master")]
+        self.title_groups = [("Mr.",), ("Mrs.",), ("Miss.",), ("Sir.", "Dr.", "Rev.", "Master", "Col.", "Major.", "Lady")]
         self.columns = []
         for title_group in self.title_groups:
             self.columns.append("_".join(title_group))
@@ -112,7 +112,7 @@ class Title_Extractor(BaseEstimator, TransformerMixin):
         return pd.DataFrame(indeces_dict)
 
     
-sex_encoder = make_pipeline(Row_Flipper(), OrdinalEncoder())
+sex_encoder = make_pipeline( OrdinalEncoder())
 
 
 def take_num_len56(ticket):
@@ -129,8 +129,8 @@ def take_first_digit123(ticket):
     except:
         return 0
     
-ticket_transformer_1 = make_pipeline(FunctionTransformer(np.vectorize(take_num_len56), validate=False), Row_Flipper(), OneHotEncoder(categories='auto'))
-ticket_transformer_2 = make_pipeline(FunctionTransformer(np.vectorize(take_first_digit123), validate=False), Row_Flipper(), OneHotEncoder(categories='auto'))
+ticket_transformer_1 = make_pipeline(FunctionTransformer(np.vectorize(take_num_len56), validate=False), OneHotEncoder(categories='auto'))
+ticket_transformer_2 = make_pipeline(FunctionTransformer(np.vectorize(take_first_digit123), validate=False), OneHotEncoder(categories='auto'))
 
 
 def quasilist_to_set(quasilist):
@@ -159,20 +159,20 @@ letter_encoder = FunctionTransformer(np.vectorize(letter_categories), validate=F
 cabin_transformer = make_pipeline(letter_extractor, letter_encoder, Row_Flipper(), OneHotEncoder(categories='auto'))
 
 
-embarked_transformer = make_pipeline(Row_Flipper(), SimpleImputer(strategy='most_frequent'), OneHotEncoder(categories='auto'))
+embarked_transformer = make_pipeline(SimpleImputer(strategy='most_frequent'), OneHotEncoder(categories='auto'))
 
 
-pclass_transformer = make_pipeline(Row_Flipper(), OneHotEncoder(categories='auto', handle_unknown='ignore'))
+pclass_transformer = make_pipeline( OneHotEncoder(categories='auto', handle_unknown='ignore'))
 
 
 categorical_tr = []
 categorical_tr.append(('title_extractor', Title_Extractor(), 'Name'))
-categorical_tr.append(('sex_encoder', sex_encoder, 'Sex'))
-categorical_tr.append(('ticket_transformer_1', ticket_transformer_1, 'Ticket'))
-categorical_tr.append(('ticket_transformer_2', ticket_transformer_2, 'Ticket'))
+categorical_tr.append(('sex_encoder', sex_encoder, ['Sex']))
+categorical_tr.append(('ticket_transformer_1', ticket_transformer_1, ['Ticket']))
+categorical_tr.append(('ticket_transformer_2', ticket_transformer_2, ['Ticket']))
 categorical_tr.append(('cabin_transformer', cabin_transformer, 'Cabin'))
-categorical_tr.append(('embarked_transformer', embarked_transformer, 'Embarked'))
-categorical_tr.append(('pclass_transformer', pclass_transformer, 'Pclass'))
+categorical_tr.append(('embarked_transformer', embarked_transformer, ['Embarked']))
+categorical_tr.append(('pclass_transformer', pclass_transformer, ['Pclass']))
 categorical_transformer = ColumnTransformer(categorical_tr, sparse_threshold=0)
 
 
